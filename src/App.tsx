@@ -3,7 +3,7 @@ import './App.css'
 import { CHAPTERS, FINALE_ENDING, STARTING_AGE } from './data/chapters'
 import { checkGameOver, type Ending } from './data/endings'
 import { pickCloserLine, RANK_CAPTIONS } from './data/mockery'
-import { INITIAL_STATS, STAT_LABELS, type Scene, type SceneChoice, type Stats } from './data/types'
+import { INITIAL_STATS, STAT_LABELS, type Chapter, type Scene, type SceneChoice, type Stats } from './data/types'
 
 interface LogEntry {
   key: string
@@ -64,7 +64,10 @@ function App() {
   const [chapterIndex, setChapterIndex] = useState(0)
   const [sceneIndex, setSceneIndex] = useState(0)
   const [log, setLog] = useState<LogEntry[]>([])
+  const [history, setHistory] = useState<LogEntry[]>([])
   const [pendingScene, setPendingScene] = useState<Scene | null>(null)
+  const [awaitingNextChapter, setAwaitingNextChapter] = useState<Chapter | null>(null)
+  const [chapterTransition, setChapterTransition] = useState<Chapter | null>(null)
   const [ending, setEnding] = useState<Ending | null>(null)
   const [isTyping, setIsTyping] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -73,6 +76,11 @@ function App() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [log, isTyping])
 
+  function pushEntries(entries: LogEntry[]) {
+    setLog((prev) => [...prev, ...entries])
+    setHistory((prev) => [...prev, ...entries])
+  }
+
   function startGame() {
     const trimmed = nameDraft.trim()
     if (!trimmed) return
@@ -80,27 +88,29 @@ function App() {
   }
 
   function advanceScene() {
-    if (!characterName || ending || isTyping || pendingScene) return
+    // Note: not guarded on chapterTransition — handleTransitionEnd calls this
+    // right after setChapterTransition(null), and that update hasn't landed
+    // in this closure yet. The UI itself hides the "Continuer" button while
+    // chapterTransition is set, so there's no user-triggered path to worry about.
+    if (!characterName || ending || isTyping || pendingScene || awaitingNextChapter) return
     const chapter = CHAPTERS[chapterIndex]
     if (!chapter) return
     const scene = chapter.scenes[sceneIndex]
 
     setIsTyping(true)
     window.setTimeout(() => {
-      setLog((prev) => {
-        const next = [...prev]
-        if (sceneIndex === 0) {
-          next.push({ key: `${chapter.id}-title`, emoji: '', text: chapter.title, impact: 0, isChapterTitle: true })
-        }
-        next.push({
-          key: `${scene.id}-prompt`,
-          emoji: scene.emoji,
-          text: sceneText(scene, memory).replaceAll('{name}', characterName),
-          accent: chapter.accent,
-          impact: 0,
-        })
-        return next
+      const entries: LogEntry[] = []
+      if (sceneIndex === 0) {
+        entries.push({ key: `${chapter.id}-title`, emoji: '', text: chapter.title, impact: 0, isChapterTitle: true })
+      }
+      entries.push({
+        key: `${scene.id}-prompt`,
+        emoji: scene.emoji,
+        text: sceneText(scene, memory).replaceAll('{name}', characterName),
+        accent: chapter.accent,
+        impact: 0,
       })
+      pushEntries(entries)
       setPendingScene(scene)
       setIsTyping(false)
     }, TYPING_DELAY_MS)
@@ -117,8 +127,7 @@ function App() {
       setStats(nextStats)
       setAge(nextAge)
       if (choice.memoryTags?.length) setMemory((prev) => [...prev, ...choice.memoryTags!])
-      setLog((prev) => [
-        ...prev,
+      pushEntries([
         { key: `${pendingScene.id}-${choice.id}`, emoji: choice.emoji, text, accent: chapter.accent, impact: computeImpact(choice.effects) },
       ])
       setPendingScene(null)
@@ -134,13 +143,28 @@ function App() {
         if (chapterIndex >= CHAPTERS.length - 1) {
           setEnding(FINALE_ENDING)
         } else {
-          setChapterIndex((c) => c + 1)
-          setSceneIndex(0)
+          setAwaitingNextChapter(CHAPTERS[chapterIndex + 1])
         }
       } else {
         setSceneIndex((s) => s + 1)
       }
     }, TYPING_DELAY_MS)
+  }
+
+  function confirmNextChapter() {
+    if (!awaitingNextChapter || chapterTransition) return
+    const next = awaitingNextChapter
+    const nextIndex = CHAPTERS.findIndex((c) => c.id === next.id)
+    setAwaitingNextChapter(null)
+    setLog([])
+    setChapterIndex(nextIndex)
+    setSceneIndex(0)
+    setChapterTransition(next)
+  }
+
+  function handleTransitionEnd() {
+    setChapterTransition(null)
+    advanceScene()
   }
 
   function restart() {
@@ -152,7 +176,10 @@ function App() {
     setChapterIndex(0)
     setSceneIndex(0)
     setLog([])
+    setHistory([])
     setPendingScene(null)
+    setAwaitingNextChapter(null)
+    setChapterTransition(null)
     setEnding(null)
     setIsTyping(false)
   }
@@ -182,7 +209,7 @@ function App() {
   }
 
   if (ending) {
-    const shameList = [...log]
+    const shameList = [...history]
       .filter((entry) => entry.impact > 0)
       .sort((a, b) => b.impact - a.impact)
       .slice(0, 3)
@@ -231,6 +258,17 @@ function App() {
 
   return (
     <main className="screen game-screen">
+      {chapterTransition && (
+        <div
+          key={chapterTransition.id}
+          className="chapter-transition"
+          style={{ background: chapterTransition.accent }}
+          onAnimationEnd={handleTransitionEnd}
+        >
+          <span className="chapter-transition-label">{chapterTransition.title}</span>
+        </div>
+      )}
+
       <header className="stats-bar">
         <div className="stat stat--name" title="Nom">
           <span className="stat-icon" aria-hidden="true">
@@ -306,7 +344,7 @@ function App() {
       </div>
 
       <div className="action-bar">
-        {isTyping ? null : pendingScene ? (
+        {chapterTransition || isTyping ? null : pendingScene ? (
           <div className="choices">
             {pendingScene.choices.map((choice) => (
               <button key={choice.id} className="primary-button choice-button" onClick={() => chooseOption(choice)}>
@@ -314,6 +352,16 @@ function App() {
               </button>
             ))}
           </div>
+        ) : awaitingNextChapter ? (
+          <button
+            className="primary-button chapter-next-button"
+            style={{
+              background: `linear-gradient(135deg, ${awaitingNextChapter.accent}, ${awaitingNextChapter.accent}aa)`,
+            }}
+            onClick={confirmNextChapter}
+          >
+            📖 {awaitingNextChapter.title} →
+          </button>
         ) : (
           <button className="primary-button" onClick={advanceScene}>
             Continuer
