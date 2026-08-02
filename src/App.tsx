@@ -6,6 +6,7 @@ import { INITIAL_FLAGS, INITIAL_STATS, STAT_LABELS, type Flags, type MisfortuneE
 
 interface LogEntry {
   key: string
+  emoji: string
   text: string
 }
 
@@ -51,6 +52,7 @@ function App() {
   }
 
   function resolveTurn(
+    emoji: string,
     text: string,
     effects: Partial<Stats> | undefined,
     eventId: string,
@@ -62,7 +64,7 @@ function App() {
     setStats(nextStats)
     setAge(nextAge)
     if (flagChanges) setFlags((prev) => ({ ...prev, ...flagChanges }))
-    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, text }])
+    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, emoji, text }])
     setRecentEventIds((prev) => [...prev, eventId].slice(-5))
     setPendingChoice(null)
 
@@ -76,10 +78,10 @@ function App() {
     const text = event.text.replace('{name}', characterName)
     if (event.choices) {
       setPendingChoice(event)
-      setLog((prev) => [...prev, { key: `${event.id}-prompt-${prev.length}`, text }])
+      setLog((prev) => [...prev, { key: `${event.id}-prompt-${prev.length}`, emoji: event.emoji, text }])
       return
     }
-    resolveTurn(text, event.effects, event.id, event.setFlags)
+    resolveTurn(event.emoji, text, event.effects, event.id, event.setFlags)
   }
 
   function chooseOption(choiceId: string) {
@@ -87,7 +89,7 @@ function App() {
     const choice = pendingChoice.choices?.find((c) => c.id === choiceId)
     if (!choice) return
     const text = choice.resultText.replace('{name}', characterName)
-    resolveTurn(text, choice.effects, `${pendingChoice.id}-${choice.id}`, choice.setFlags)
+    resolveTurn(choice.emoji, text, choice.effects, `${pendingChoice.id}-${choice.id}`, choice.setFlags)
   }
 
   function restart() {
@@ -126,6 +128,9 @@ function App() {
   if (ending) {
     return (
       <main className="screen name-screen">
+        <span className="ending-emoji" aria-hidden="true">
+          {ending.emoji}
+        </span>
         <h1>Fin de partie</h1>
         <p className="tagline">{ending.text.replace('{name}', characterName)}</p>
         <ul className="recap-stats">
@@ -169,6 +174,9 @@ function App() {
       <div className="log">
         {log.map((entry) => (
           <p key={entry.key} className="log-entry">
+            <span className="log-emoji" aria-hidden="true">
+              {entry.emoji}
+            </span>
             {entry.text}
           </p>
         ))}

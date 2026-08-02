@@ -39,6 +39,8 @@ export interface EventChoice {
   label: string
   /** Use {name} as a placeholder for the character's name. */
   resultText: string
+  /** Shown before the result text, like an emoji reaction on a text message. */
+  emoji: string
   effects: Partial<Stats>
   setFlags?: Partial<Flags>
 }
@@ -48,6 +50,8 @@ export interface MisfortuneEvent {
   category: EventCategory
   /** Use {name} as a placeholder for the character's name. */
   text: string
+  /** Shown before the event text, like an emoji reaction on a text message. */
+  emoji: string
   /** Only eligible when the current flags match all of these. */
   requires?: Partial<Flags>
   /** Present for simple (non-choice) events. */
