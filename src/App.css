@@ -301,6 +301,38 @@
   margin-right: 8px;
 }
 
+.bubble-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  flex-shrink: 0;
+  animation: bubble-in 0.35s ease;
+}
+
+.bubble-wrap--outgoing {
+  align-items: flex-end;
+}
+
+.speaker-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 0 6px;
+}
+
+.log-entry.bubble {
+  max-width: 82%;
+  animation: none;
+}
+
+.log-entry--outgoing {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-left: none;
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
 .chapter-next-button {
   color: #fff;
 }

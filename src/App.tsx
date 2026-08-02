@@ -12,6 +12,10 @@ interface LogEntry {
   accent?: string
   impact: number
   isChapterTitle?: boolean
+  /** Name of the character this line is attributed to, for dialogue scenes. */
+  speaker?: string
+  /** True when this is the player character's own outgoing reply, rendered right-aligned. */
+  isReply?: boolean
 }
 
 function computeImpact(effects: Partial<Stats> = {}): number {
@@ -109,6 +113,7 @@ function App() {
         text: sceneText(scene, memory).replaceAll('{name}', characterName),
         accent: chapter.accent,
         impact: 0,
+        speaker: scene.speaker,
       })
       pushEntries(entries)
       setPendingScene(scene)
@@ -127,9 +132,28 @@ function App() {
       setStats(nextStats)
       setAge(nextAge)
       if (choice.memoryTags?.length) setMemory((prev) => [...prev, ...choice.memoryTags!])
-      pushEntries([
-        { key: `${pendingScene.id}-${choice.id}`, emoji: choice.emoji, text, accent: chapter.accent, impact: computeImpact(choice.effects) },
-      ])
+      const replyEntries: LogEntry[] = [
+        {
+          key: `${pendingScene.id}-${choice.id}`,
+          emoji: choice.emoji,
+          text,
+          accent: chapter.accent,
+          impact: computeImpact(choice.effects),
+          speaker: choice.isReply ? characterName : undefined,
+          isReply: choice.isReply,
+        },
+      ]
+      if (choice.isReply && choice.npcReaction) {
+        replyEntries.push({
+          key: `${pendingScene.id}-${choice.id}-reaction`,
+          emoji: '',
+          text: choice.npcReaction.replaceAll('{name}', characterName),
+          accent: chapter.accent,
+          impact: 0,
+          speaker: pendingScene.speaker,
+        })
+      }
+      pushEntries(replyEntries)
       setPendingScene(null)
       setIsTyping(false)
 
@@ -315,12 +339,30 @@ function App() {
       </header>
 
       <div className="log">
-        {log.map((entry) =>
-          entry.isChapterTitle ? (
-            <div key={entry.key} className="chapter-divider">
-              <span>{entry.text}</span>
-            </div>
-          ) : (
+        {log.map((entry) => {
+          if (entry.isChapterTitle) {
+            return (
+              <div key={entry.key} className="chapter-divider">
+                <span>{entry.text}</span>
+              </div>
+            )
+          }
+          if (entry.speaker) {
+            return (
+              <div key={entry.key} className={`bubble-wrap${entry.isReply ? ' bubble-wrap--outgoing' : ''}`}>
+                <span className="speaker-name">{entry.speaker}</span>
+                <p className={`log-entry bubble${entry.isReply ? ' log-entry--outgoing' : ''}`}>
+                  {entry.emoji && (
+                    <span className="log-emoji" aria-hidden="true">
+                      {entry.emoji}
+                    </span>
+                  )}
+                  {entry.text}
+                </p>
+              </div>
+            )
+          }
+          return (
             <p
               key={entry.key}
               className="log-entry"
@@ -331,8 +373,8 @@ function App() {
               </span>
               {entry.text}
             </p>
-          ),
-        )}
+          )
+        })}
         {isTyping && (
           <p className="log-entry log-entry--typing" aria-live="polite" aria-label={`La vie de ${characterName} continue...`}>
             <span className="typing-dot" />

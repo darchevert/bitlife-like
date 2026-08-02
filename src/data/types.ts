@@ -66,11 +66,20 @@ export interface SceneChoice {
   label: string
   /** Shown before the result text, like an emoji reaction on a text message. */
   emoji: string
-  /** Use {name} as a placeholder for the character's name. */
+  /**
+   * Use {name} as a placeholder for the character's name.
+   * If the parent scene has a `speaker`, set `isReply` and write this as the
+   * character's own spoken line — it renders as an outgoing chat bubble
+   * instead of narrator text.
+   */
   resultText: string
   effects: Partial<Stats>
   /** Tags added to the run's memory when this choice is picked, for later callbacks. */
   memoryTags?: string[]
+  /** Renders resultText as the player character's own outgoing message rather than narration. */
+  isReply?: boolean
+  /** Optional follow-up line from the scene's speaker, shown as a second incoming bubble right after. */
+  npcReaction?: string
 }
 
 export interface Scene {
@@ -80,6 +89,8 @@ export interface Scene {
   ageAfter: number
   /** Use {name} as a placeholder for the character's name. */
   text: string
+  /** If set, text/callbackText is attributed to this character as an incoming dialogue bubble instead of narrator prose. */
+  speaker?: string
   /** If every one of these tags is already in memory, callbackText is shown instead of text. */
   callbackRequires?: string[]
   callbackText?: string
