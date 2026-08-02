@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { pickRandomEvent } from './data/events'
 import { checkGameOver, type Ending } from './data/endings'
-import { INITIAL_STATS, STAT_LABELS, type MisfortuneEvent, type Stats } from './data/types'
+import { INITIAL_FLAGS, INITIAL_STATS, STAT_LABELS, type Flags, type MisfortuneEvent, type Stats } from './data/types'
 
 interface LogEntry {
   key: string
@@ -33,6 +33,7 @@ function App() {
   const [nameDraft, setNameDraft] = useState('')
   const [age, setAge] = useState(18)
   const [stats, setStats] = useState<Stats>(INITIAL_STATS)
+  const [flags, setFlags] = useState<Flags>(INITIAL_FLAGS)
   const [log, setLog] = useState<LogEntry[]>([])
   const [recentEventIds, setRecentEventIds] = useState<string[]>([])
   const [pendingChoice, setPendingChoice] = useState<MisfortuneEvent | null>(null)
@@ -49,12 +50,18 @@ function App() {
     setCharacterName(trimmed)
   }
 
-  function resolveTurn(text: string, effects: Partial<Stats> | undefined, eventId: string) {
+  function resolveTurn(
+    text: string,
+    effects: Partial<Stats> | undefined,
+    eventId: string,
+    flagChanges?: Partial<Flags>,
+  ) {
     if (!characterName) return
     const nextStats = applyEffects(stats, effects)
     const nextAge = age + 1
     setStats(nextStats)
     setAge(nextAge)
+    if (flagChanges) setFlags((prev) => ({ ...prev, ...flagChanges }))
     setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, text }])
     setRecentEventIds((prev) => [...prev, eventId].slice(-5))
     setPendingChoice(null)
@@ -65,14 +72,14 @@ function App() {
 
   function advanceYear() {
     if (!characterName || ending) return
-    const event = pickRandomEvent(recentEventIds)
+    const event = pickRandomEvent(recentEventIds, flags)
     const text = event.text.replace('{name}', characterName)
     if (event.choices) {
       setPendingChoice(event)
       setLog((prev) => [...prev, { key: `${event.id}-prompt-${prev.length}`, text }])
       return
     }
-    resolveTurn(text, event.effects, event.id)
+    resolveTurn(text, event.effects, event.id, event.setFlags)
   }
 
   function chooseOption(choiceId: string) {
@@ -80,7 +87,7 @@ function App() {
     const choice = pendingChoice.choices?.find((c) => c.id === choiceId)
     if (!choice) return
     const text = choice.resultText.replace('{name}', characterName)
-    resolveTurn(text, choice.effects, `${pendingChoice.id}-${choice.id}`)
+    resolveTurn(text, choice.effects, `${pendingChoice.id}-${choice.id}`, choice.setFlags)
   }
 
   function restart() {
@@ -88,6 +95,7 @@ function App() {
     setNameDraft('')
     setAge(18)
     setStats(INITIAL_STATS)
+    setFlags(INITIAL_FLAGS)
     setLog([])
     setRecentEventIds([])
     setPendingChoice(null)

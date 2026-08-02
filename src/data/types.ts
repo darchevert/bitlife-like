@@ -18,6 +18,21 @@ export const INITIAL_STATS: Stats = {
 
 export type EventCategory = 'social' | 'travail' | 'argent' | 'sante' | 'amour'
 
+/**
+ * Small persistent situation the character is in, used to chain events into
+ * short story arcs (e.g. getting fired makes job-hunting events show up
+ * until a new-job event resolves it) instead of every year being unrelated.
+ */
+export interface Flags {
+  emploi: 'en-poste' | 'sans-emploi'
+  couple: 'celibataire' | 'en-couple'
+}
+
+export const INITIAL_FLAGS: Flags = {
+  emploi: 'en-poste',
+  couple: 'celibataire',
+}
+
 export interface EventChoice {
   id: string
   /** Button label, e.g. "Mentir" / "Dire la vérité". */
@@ -25,6 +40,7 @@ export interface EventChoice {
   /** Use {name} as a placeholder for the character's name. */
   resultText: string
   effects: Partial<Stats>
+  setFlags?: Partial<Flags>
 }
 
 export interface MisfortuneEvent {
@@ -32,8 +48,11 @@ export interface MisfortuneEvent {
   category: EventCategory
   /** Use {name} as a placeholder for the character's name. */
   text: string
+  /** Only eligible when the current flags match all of these. */
+  requires?: Partial<Flags>
   /** Present for simple (non-choice) events. */
   effects?: Partial<Stats>
+  setFlags?: Partial<Flags>
   /** Present for events where the player picks how the character reacts. */
   choices?: EventChoice[]
 }

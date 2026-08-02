@@ -1,4 +1,4 @@
-import type { MisfortuneEvent } from './types'
+import type { Flags, MisfortuneEvent } from './types'
 
 // Demo content — a broader curated pool to prove the game loop end-to-end.
 // Tone stays absurd/comic on purpose (never realistic-sounding claims about
@@ -62,34 +62,57 @@ export const MISFORTUNE_EVENTS: MisfortuneEvent[] = [
   },
 
   // --- travail ---
+  // "en-poste" and "sans-emploi" events chain into each other: getting fired
+  // gates the job-hunting events until a new-job event resolves it back.
   {
     id: 'wifi-interview',
     category: 'travail',
     text: "Le wifi de {name} tombe en panne pendant un entretien d'embauche en visio.",
+    requires: { emploi: 'sans-emploi' },
     effects: { bonheur: -5, chance: -3 },
+  },
+  {
+    id: 'job-rejection',
+    category: 'travail',
+    text: 'Encore une lettre de refus pour {name}. La pile commence à être impressionnante.',
+    requires: { emploi: 'sans-emploi' },
+    effects: { bonheur: -3, argent: -2 },
+  },
+  {
+    id: 'new-job',
+    category: 'travail',
+    text: '{name} décroche enfin un nouveau poste. Correct, sans plus, mais ça paie les factures.',
+    requires: { emploi: 'sans-emploi' },
+    effects: { bonheur: 4, argent: 6 },
+    setFlags: { emploi: 'en-poste' },
   },
   {
     id: 'typo-report',
     category: 'travail',
     text: 'Une faute de frappe dans le rapport de {name} change complètement le sens des chiffres. Tout le monde l’a vue.',
+    requires: { emploi: 'en-poste' },
     effects: { reputation: -6 },
   },
   {
     id: 'zipper',
     category: 'travail',
     text: '{name} fait sa présentation la plus importante de l’année avec la braguette ouverte.',
+    requires: { emploi: 'en-poste' },
     effects: { bonheur: -4, reputation: -5 },
   },
   {
     id: 'mass-layoff-email',
     category: 'travail',
     text: '{name} apprend qu’il est licencié via un mail groupé envoyé à toute l’entreprise.',
+    requires: { emploi: 'en-poste' },
     effects: { bonheur: -9, argent: -15 },
+    setFlags: { emploi: 'sans-emploi' },
   },
   {
     id: 'coffee-machine',
     category: 'travail',
     text: 'La machine à café du bureau tombe en panne. Le patron demande qui est responsable.',
+    requires: { emploi: 'en-poste' },
     choices: [
       {
         id: 'confess',
@@ -184,6 +207,8 @@ export const MISFORTUNE_EVENTS: MisfortuneEvent[] = [
   },
 
   // --- amour ---
+  // Same chaining idea as "travail": a breakup gates dating-attempt events
+  // until a new-relationship event puts the character back "en-couple".
   {
     id: 'ex-supermarket',
     category: 'amour',
@@ -194,7 +219,16 @@ export const MISFORTUNE_EVENTS: MisfortuneEvent[] = [
     id: 'bad-date',
     category: 'amour',
     text: '{name} renverse un verre entier sur son rendez-vous, cinq minutes après son arrivée.',
+    requires: { couple: 'celibataire' },
     effects: { bonheur: -5, chance: -3 },
+  },
+  {
+    id: 'new-relationship',
+    category: 'amour',
+    text: 'Après une série de rendez-vous ratés, {name} rencontre enfin quelqu’un... qui vit à 400 km.',
+    requires: { couple: 'celibataire' },
+    effects: { bonheur: 5 },
+    setFlags: { couple: 'en-couple' },
   },
   {
     id: 'wrong-recipient',
@@ -206,12 +240,15 @@ export const MISFORTUNE_EVENTS: MisfortuneEvent[] = [
     id: 'breakup-text',
     category: 'amour',
     text: '{name} se fait quitter par SMS, le jour de son anniversaire.',
+    requires: { couple: 'en-couple' },
     effects: { bonheur: -9 },
+    setFlags: { couple: 'celibataire' },
   },
   {
     id: 'honest-opinion',
     category: 'amour',
     text: 'Son/sa partenaire demande à {name} : "Cette tenue me va ?"',
+    requires: { couple: 'en-couple' },
     choices: [
       {
         id: 'lie',
@@ -231,9 +268,15 @@ export const MISFORTUNE_EVENTS: MisfortuneEvent[] = [
 
 const RECENT_HISTORY_SIZE = 3
 
-export function pickRandomEvent(recentIds: string[] = []): MisfortuneEvent {
+function matchesFlags(event: MisfortuneEvent, flags: Flags): boolean {
+  if (!event.requires) return true
+  return (Object.keys(event.requires) as (keyof Flags)[]).every((key) => event.requires?.[key] === flags[key])
+}
+
+export function pickRandomEvent(recentIds: string[], flags: Flags): MisfortuneEvent {
+  const eligible = MISFORTUNE_EVENTS.filter((e) => matchesFlags(e, flags))
   const recent = new Set(recentIds.slice(-RECENT_HISTORY_SIZE))
-  const pool = MISFORTUNE_EVENTS.filter((e) => !recent.has(e.id))
-  const source = pool.length > 0 ? pool : MISFORTUNE_EVENTS
+  const pool = eligible.filter((e) => !recent.has(e.id))
+  const source = pool.length > 0 ? pool : eligible.length > 0 ? eligible : MISFORTUNE_EVENTS
   return source[Math.floor(Math.random() * source.length)]
 }
