@@ -19,6 +19,12 @@ function computeImpact(effects: Partial<Stats> = {}): number {
 }
 
 const STAT_ORDER: (keyof Stats)[] = ['bonheur', 'chance', 'reputation', 'argent']
+const STAT_ICONS: Record<keyof Stats, string> = {
+  bonheur: '😊',
+  chance: '🍀',
+  reputation: '⭐',
+  argent: '💶',
+}
 const TYPING_DELAY_MS = 700
 
 function clampStats(stats: Stats): Stats {
@@ -89,7 +95,7 @@ function App() {
         next.push({
           key: `${scene.id}-prompt`,
           emoji: scene.emoji,
-          text: sceneText(scene, memory).replace('{name}', characterName),
+          text: sceneText(scene, memory).replaceAll('{name}', characterName),
           accent: chapter.accent,
           impact: 0,
         })
@@ -105,7 +111,7 @@ function App() {
     const chapter = CHAPTERS[chapterIndex]
     setIsTyping(true)
     window.setTimeout(() => {
-      const text = choice.resultText.replace('{name}', characterName)
+      const text = choice.resultText.replaceAll('{name}', characterName)
       const nextStats = applyEffects(stats, choice.effects)
       const nextAge = pendingScene.ageAfter
       setStats(nextStats)
@@ -187,7 +193,7 @@ function App() {
           {ending.emoji}
         </span>
         <h1>Fin de partie</h1>
-        <p className="tagline">{ending.text.replace('{name}', characterName)}</p>
+        <p className="tagline">{ending.text.replaceAll('{name}', characterName)}</p>
         <ul className="recap-stats">
           <li>Âge atteint : {age} ans</li>
           {STAT_ORDER.map((key) => (
@@ -226,12 +232,16 @@ function App() {
   return (
     <main className="screen game-screen">
       <header className="stats-bar">
-        <div className="stat">
-          <span className="stat-label">Nom</span>
-          <span className="stat-value">{characterName}</span>
+        <div className="stat stat--name" title="Nom">
+          <span className="stat-icon" aria-hidden="true">
+            👤
+          </span>
+          <span className="stat-value stat-value--name">{characterName}</span>
         </div>
-        <div className="stat">
-          <span className="stat-label">Âge</span>
+        <div className="stat" title="Âge">
+          <span className="stat-icon" aria-hidden="true">
+            🎂
+          </span>
           <span key={age} className="stat-value stat-value--pulse">
             {age}
           </span>
@@ -239,8 +249,10 @@ function App() {
         {STAT_ORDER.map((key) => {
           if (key === 'argent') {
             return (
-              <div className="stat" key={key}>
-                <span className="stat-label">{STAT_LABELS[key]}</span>
+              <div className="stat" key={key} title={STAT_LABELS[key]}>
+                <span className="stat-icon" aria-hidden="true">
+                  {STAT_ICONS[key]}
+                </span>
                 <span
                   key={stats.argent}
                   className={`stat-value stat-value--pulse ${stats.argent < 0 ? 'stat-value--negative' : ''}`}
@@ -252,12 +264,11 @@ function App() {
           }
           const value = stats[key]
           return (
-            <div className="stat" key={key}>
-              <span className="stat-label">{STAT_LABELS[key]}</span>
-              <div className="gauge">
-                <div className={`gauge-fill gauge-fill--${gaugeTone(value)}`} style={{ width: `${value}%` }} />
-              </div>
-              <span key={value} className="stat-value stat-value--pulse">
+            <div className="stat" key={key} title={STAT_LABELS[key]}>
+              <span className="stat-icon" aria-hidden="true">
+                {STAT_ICONS[key]}
+              </span>
+              <span key={value} className={`stat-value stat-value--pulse stat-value--${gaugeTone(value)}`}>
                 {value}%
               </span>
             </div>
