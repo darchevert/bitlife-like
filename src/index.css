@@ -42,7 +42,8 @@ body {
 #root {
   max-width: 480px;
   margin: 0 auto;
-  min-height: 100svh;
+  height: 100svh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }

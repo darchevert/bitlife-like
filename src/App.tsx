@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { pickRandomEvent } from './data/events'
 import { checkGameOver, type Ending } from './data/endings'
@@ -37,6 +37,11 @@ function App() {
   const [recentEventIds, setRecentEventIds] = useState<string[]>([])
   const [pendingChoice, setPendingChoice] = useState<MisfortuneEvent | null>(null)
   const [ending, setEnding] = useState<Ending | null>(null)
+  const logEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [log])
 
   function startGame() {
     const trimmed = nameDraft.trim()
@@ -50,7 +55,7 @@ function App() {
     const nextAge = age + 1
     setStats(nextStats)
     setAge(nextAge)
-    setLog((prev) => [{ key: `${eventId}-${prev.length}`, text }, ...prev])
+    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, text }])
     setRecentEventIds((prev) => [...prev, eventId].slice(-5))
     setPendingChoice(null)
 
@@ -64,7 +69,7 @@ function App() {
     const text = event.text.replace('{name}', characterName)
     if (event.choices) {
       setPendingChoice(event)
-      setLog((prev) => [{ key: `${event.id}-prompt-${prev.length}`, text }, ...prev])
+      setLog((prev) => [...prev, { key: `${event.id}-prompt-${prev.length}`, text }])
       return
     }
     resolveTurn(text, event.effects, event.id)
@@ -153,27 +158,30 @@ function App() {
         ))}
       </header>
 
-      {pendingChoice ? (
-        <div className="choices">
-          {pendingChoice.choices?.map((choice) => (
-            <button key={choice.id} className="primary-button choice-button" onClick={() => chooseOption(choice.id)}>
-              {choice.label}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <button className="primary-button" onClick={advanceYear}>
-          Année suivante
-        </button>
-      )}
-
-      <ul className="log">
+      <div className="log">
         {log.map((entry) => (
-          <li key={entry.key} className="log-entry">
+          <p key={entry.key} className="log-entry">
             {entry.text}
-          </li>
+          </p>
         ))}
-      </ul>
+        <div ref={logEndRef} />
+      </div>
+
+      <div className="action-bar">
+        {pendingChoice ? (
+          <div className="choices">
+            {pendingChoice.choices?.map((choice) => (
+              <button key={choice.id} className="primary-button choice-button" onClick={() => chooseOption(choice.id)}>
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button className="primary-button" onClick={advanceYear}>
+            Année suivante
+          </button>
+        )}
+      </div>
     </main>
   )
 }
