@@ -3,12 +3,13 @@ import './App.css'
 import { pickRandomEvent } from './data/events'
 import { checkGameOver, type Ending } from './data/endings'
 import { pickCloserLine, RANK_CAPTIONS } from './data/mockery'
-import { INITIAL_FLAGS, INITIAL_STATS, STAT_LABELS, type Flags, type MisfortuneEvent, type Stats } from './data/types'
+import { INITIAL_FLAGS, INITIAL_STATS, STAT_LABELS, type EventCategory, type Flags, type MisfortuneEvent, type Stats } from './data/types'
 
 interface LogEntry {
   key: string
   emoji: string
   text: string
+  category?: EventCategory
   /** How badly this turn's event hurt the character's stats, for the shame ranking. */
   impact: number
 }
@@ -18,6 +19,7 @@ function computeImpact(effects: Partial<Stats> = {}): number {
 }
 
 const STAT_ORDER: (keyof Stats)[] = ['bonheur', 'chance', 'reputation', 'argent']
+const TYPING_DELAY_MS = 700
 
 function clampStats(stats: Stats): Stats {
   return {
@@ -36,6 +38,12 @@ function applyEffects(stats: Stats, effects: Partial<Stats> = {}): Stats {
   return clampStats(next)
 }
 
+function gaugeTone(value: number): 'bad' | 'mid' | 'good' {
+  if (value < 30) return 'bad'
+  if (value < 60) return 'mid'
+  return 'good'
+}
+
 function App() {
   const [characterName, setCharacterName] = useState<string | null>(null)
   const [nameDraft, setNameDraft] = useState('')
@@ -46,11 +54,12 @@ function App() {
   const [recentEventIds, setRecentEventIds] = useState<string[]>([])
   const [pendingChoice, setPendingChoice] = useState<MisfortuneEvent | null>(null)
   const [ending, setEnding] = useState<Ending | null>(null)
+  const [isTyping, setIsTyping] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [log])
+  }, [log, isTyping])
 
   function startGame() {
     const trimmed = nameDraft.trim()
@@ -63,6 +72,7 @@ function App() {
     text: string,
     effects: Partial<Stats> | undefined,
     eventId: string,
+    category: EventCategory | undefined,
     flagChanges?: Partial<Flags>,
   ) {
     if (!characterName) return
@@ -71,7 +81,7 @@ function App() {
     setStats(nextStats)
     setAge(nextAge)
     if (flagChanges) setFlags((prev) => ({ ...prev, ...flagChanges }))
-    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, emoji, text, impact: computeImpact(effects) }])
+    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, emoji, text, category, impact: computeImpact(effects) }])
     setRecentEventIds((prev) => [...prev, eventId].slice(-5))
     setPendingChoice(null)
 
@@ -80,23 +90,35 @@ function App() {
   }
 
   function advanceYear() {
-    if (!characterName || ending) return
-    const event = pickRandomEvent(recentEventIds, flags)
-    const text = event.text.replace('{name}', characterName)
-    if (event.choices) {
-      setPendingChoice(event)
-      setLog((prev) => [...prev, { key: `${event.id}-prompt-${prev.length}`, emoji: event.emoji, text, impact: 0 }])
-      return
-    }
-    resolveTurn(event.emoji, text, event.effects, event.id, event.setFlags)
+    if (!characterName || ending || isTyping || pendingChoice) return
+    setIsTyping(true)
+    window.setTimeout(() => {
+      const event = pickRandomEvent(recentEventIds, flags)
+      const text = event.text.replace('{name}', characterName)
+      if (event.choices) {
+        setPendingChoice(event)
+        setLog((prev) => [
+          ...prev,
+          { key: `${event.id}-prompt-${prev.length}`, emoji: event.emoji, text, category: event.category, impact: 0 },
+        ])
+        setIsTyping(false)
+        return
+      }
+      resolveTurn(event.emoji, text, event.effects, event.id, event.category, event.setFlags)
+      setIsTyping(false)
+    }, TYPING_DELAY_MS)
   }
 
   function chooseOption(choiceId: string) {
-    if (!pendingChoice || !characterName) return
+    if (!pendingChoice || !characterName || isTyping) return
     const choice = pendingChoice.choices?.find((c) => c.id === choiceId)
     if (!choice) return
-    const text = choice.resultText.replace('{name}', characterName)
-    resolveTurn(choice.emoji, text, choice.effects, `${pendingChoice.id}-${choice.id}`, choice.setFlags)
+    setIsTyping(true)
+    window.setTimeout(() => {
+      const text = choice.resultText.replace('{name}', characterName)
+      resolveTurn(choice.emoji, text, choice.effects, `${pendingChoice.id}-${choice.id}`, pendingChoice.category, choice.setFlags)
+      setIsTyping(false)
+    }, TYPING_DELAY_MS)
   }
 
   function restart() {
@@ -109,6 +131,7 @@ function App() {
     setRecentEventIds([])
     setPendingChoice(null)
     setEnding(null)
+    setIsTyping(false)
   }
 
   if (!characterName) {
@@ -191,31 +214,56 @@ function App() {
           <span className="stat-label">Âge</span>
           <span className="stat-value">{age}</span>
         </div>
-        {STAT_ORDER.map((key) => (
-          <div className="stat" key={key}>
-            <span className="stat-label">{STAT_LABELS[key]}</span>
-            <span className="stat-value">
-              {stats[key]}
-              {key === 'argent' ? '€' : '%'}
-            </span>
-          </div>
-        ))}
+        {STAT_ORDER.map((key) => {
+          if (key === 'argent') {
+            return (
+              <div className="stat" key={key}>
+                <span className="stat-label">{STAT_LABELS[key]}</span>
+                <span
+                  key={stats.argent}
+                  className={`stat-value stat-value--pulse ${stats.argent < 0 ? 'stat-value--negative' : ''}`}
+                >
+                  {stats.argent}€
+                </span>
+              </div>
+            )
+          }
+          const value = stats[key]
+          return (
+            <div className="stat" key={key}>
+              <span className="stat-label">{STAT_LABELS[key]}</span>
+              <div className="gauge">
+                <div className={`gauge-fill gauge-fill--${gaugeTone(value)}`} style={{ width: `${value}%` }} />
+              </div>
+              <span key={value} className="stat-value stat-value--pulse">
+                {value}%
+              </span>
+            </div>
+          )
+        })}
       </header>
 
       <div className="log">
         {log.map((entry) => (
-          <p key={entry.key} className="log-entry">
+          <p key={entry.key} className={`log-entry${entry.category ? ` log-entry--${entry.category}` : ''}`}>
             <span className="log-emoji" aria-hidden="true">
               {entry.emoji}
             </span>
             {entry.text}
           </p>
         ))}
+        {isTyping && (
+          <p className="log-entry log-entry--typing" aria-live="polite" aria-label={`La vie de ${characterName} continue...`}>
+            <span className="typing-dot" />
+            <span className="typing-dot" />
+            <span className="typing-dot" />
+          </p>
+        )}
         <div ref={logEndRef} />
       </div>
 
       <div className="action-bar">
-        {pendingChoice ? (
+        {isTyping ? null : pendingChoice ? (
           <div className="choices">
             {pendingChoice.choices?.map((choice) => (
               <button key={choice.id} className="primary-button choice-button" onClick={() => chooseOption(choice.id)}>
