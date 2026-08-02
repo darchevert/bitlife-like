@@ -13,6 +13,12 @@
   gap: 16px;
 }
 
+.ending-screen {
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding-top: 40px;
+}
+
 .tagline {
   color: var(--text);
   margin-bottom: 12px;
@@ -144,4 +150,45 @@
 .ending-emoji {
   font-size: 48px;
   line-height: 1;
+}
+
+.shame-hall {
+  width: 100%;
+  max-width: 320px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+.shame-hall h2 {
+  font-size: 18px;
+  color: var(--text-h);
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+.shame-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shame-caption {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.shame-quote {
+  border-color: var(--danger);
+}
+
+.shame-closer {
+  margin: 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--danger);
 }

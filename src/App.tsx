@@ -2,12 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { pickRandomEvent } from './data/events'
 import { checkGameOver, type Ending } from './data/endings'
+import { pickCloserLine, RANK_CAPTIONS } from './data/mockery'
 import { INITIAL_FLAGS, INITIAL_STATS, STAT_LABELS, type Flags, type MisfortuneEvent, type Stats } from './data/types'
 
 interface LogEntry {
   key: string
   emoji: string
   text: string
+  /** How badly this turn's event hurt the character's stats, for the shame ranking. */
+  impact: number
+}
+
+function computeImpact(effects: Partial<Stats> = {}): number {
+  return Object.values(effects).reduce((total, value = 0) => total + Math.max(0, -value), 0)
 }
 
 const STAT_ORDER: (keyof Stats)[] = ['bonheur', 'chance', 'reputation', 'argent']
@@ -64,7 +71,7 @@ function App() {
     setStats(nextStats)
     setAge(nextAge)
     if (flagChanges) setFlags((prev) => ({ ...prev, ...flagChanges }))
-    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, emoji, text }])
+    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, emoji, text, impact: computeImpact(effects) }])
     setRecentEventIds((prev) => [...prev, eventId].slice(-5))
     setPendingChoice(null)
 
@@ -78,7 +85,7 @@ function App() {
     const text = event.text.replace('{name}', characterName)
     if (event.choices) {
       setPendingChoice(event)
-      setLog((prev) => [...prev, { key: `${event.id}-prompt-${prev.length}`, emoji: event.emoji, text }])
+      setLog((prev) => [...prev, { key: `${event.id}-prompt-${prev.length}`, emoji: event.emoji, text, impact: 0 }])
       return
     }
     resolveTurn(event.emoji, text, event.effects, event.id, event.setFlags)
@@ -126,8 +133,13 @@ function App() {
   }
 
   if (ending) {
+    const shameList = [...log]
+      .filter((entry) => entry.impact > 0)
+      .sort((a, b) => b.impact - a.impact)
+      .slice(0, 3)
+
     return (
-      <main className="screen name-screen">
+      <main className="screen name-screen ending-screen">
         <span className="ending-emoji" aria-hidden="true">
           {ending.emoji}
         </span>
@@ -142,6 +154,25 @@ function App() {
             </li>
           ))}
         </ul>
+
+        {shameList.length > 0 && (
+          <section className="shame-hall">
+            <h2>Palmarès de la honte</h2>
+            {shameList.map((entry, index) => (
+              <div key={entry.key} className="shame-entry">
+                <p className="shame-caption">{RANK_CAPTIONS[index]}</p>
+                <p className="log-entry shame-quote">
+                  <span className="log-emoji" aria-hidden="true">
+                    {entry.emoji}
+                  </span>
+                  {entry.text}
+                </p>
+                <p className="shame-closer">{pickCloserLine(index + entry.impact)}</p>
+              </div>
+            ))}
+          </section>
+        )}
+
         <button className="primary-button" onClick={restart}>
           Recommencer
         </button>
