@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
-import { pickRandomEvent } from './data/events'
+import { CHAPTERS, FINALE_ENDING, STARTING_AGE } from './data/chapters'
 import { checkGameOver, type Ending } from './data/endings'
 import { pickCloserLine, RANK_CAPTIONS } from './data/mockery'
-import { INITIAL_FLAGS, INITIAL_STATS, STAT_LABELS, type EventCategory, type Flags, type MisfortuneEvent, type Stats } from './data/types'
+import { INITIAL_STATS, STAT_LABELS, type Scene, type SceneChoice, type Stats } from './data/types'
 
 interface LogEntry {
   key: string
   emoji: string
   text: string
-  category?: EventCategory
-  /** How badly this turn's event hurt the character's stats, for the shame ranking. */
+  accent?: string
   impact: number
+  isChapterTitle?: boolean
 }
 
 function computeImpact(effects: Partial<Stats> = {}): number {
@@ -44,15 +44,21 @@ function gaugeTone(value: number): 'bad' | 'mid' | 'good' {
   return 'good'
 }
 
+function sceneText(scene: Scene, memory: string[]): string {
+  const hasCallback = scene.callbackRequires && scene.callbackRequires.every((tag) => memory.includes(tag))
+  return hasCallback && scene.callbackText ? scene.callbackText : scene.text
+}
+
 function App() {
   const [characterName, setCharacterName] = useState<string | null>(null)
   const [nameDraft, setNameDraft] = useState('')
-  const [age, setAge] = useState(18)
+  const [age, setAge] = useState(STARTING_AGE)
   const [stats, setStats] = useState<Stats>(INITIAL_STATS)
-  const [flags, setFlags] = useState<Flags>(INITIAL_FLAGS)
+  const [memory, setMemory] = useState<string[]>([])
+  const [chapterIndex, setChapterIndex] = useState(0)
+  const [sceneIndex, setSceneIndex] = useState(0)
   const [log, setLog] = useState<LogEntry[]>([])
-  const [recentEventIds, setRecentEventIds] = useState<string[]>([])
-  const [pendingChoice, setPendingChoice] = useState<MisfortuneEvent | null>(null)
+  const [pendingScene, setPendingScene] = useState<Scene | null>(null)
   const [ending, setEnding] = useState<Ending | null>(null)
   const [isTyping, setIsTyping] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -67,69 +73,80 @@ function App() {
     setCharacterName(trimmed)
   }
 
-  function resolveTurn(
-    emoji: string,
-    text: string,
-    effects: Partial<Stats> | undefined,
-    eventId: string,
-    category: EventCategory | undefined,
-    flagChanges?: Partial<Flags>,
-  ) {
-    if (!characterName) return
-    const nextStats = applyEffects(stats, effects)
-    const nextAge = age + 1
-    setStats(nextStats)
-    setAge(nextAge)
-    if (flagChanges) setFlags((prev) => ({ ...prev, ...flagChanges }))
-    setLog((prev) => [...prev, { key: `${eventId}-${prev.length}`, emoji, text, category, impact: computeImpact(effects) }])
-    setRecentEventIds((prev) => [...prev, eventId].slice(-5))
-    setPendingChoice(null)
+  function advanceScene() {
+    if (!characterName || ending || isTyping || pendingScene) return
+    const chapter = CHAPTERS[chapterIndex]
+    if (!chapter) return
+    const scene = chapter.scenes[sceneIndex]
 
-    const result = checkGameOver(nextStats, nextAge)
-    if (result) setEnding(result)
-  }
-
-  function advanceYear() {
-    if (!characterName || ending || isTyping || pendingChoice) return
     setIsTyping(true)
     window.setTimeout(() => {
-      const event = pickRandomEvent(recentEventIds, flags)
-      const text = event.text.replace('{name}', characterName)
-      if (event.choices) {
-        setPendingChoice(event)
-        setLog((prev) => [
-          ...prev,
-          { key: `${event.id}-prompt-${prev.length}`, emoji: event.emoji, text, category: event.category, impact: 0 },
-        ])
-        setIsTyping(false)
-        return
-      }
-      resolveTurn(event.emoji, text, event.effects, event.id, event.category, event.setFlags)
+      setLog((prev) => {
+        const next = [...prev]
+        if (sceneIndex === 0) {
+          next.push({ key: `${chapter.id}-title`, emoji: '', text: chapter.title, impact: 0, isChapterTitle: true })
+        }
+        next.push({
+          key: `${scene.id}-prompt`,
+          emoji: scene.emoji,
+          text: sceneText(scene, memory).replace('{name}', characterName),
+          accent: chapter.accent,
+          impact: 0,
+        })
+        return next
+      })
+      setPendingScene(scene)
       setIsTyping(false)
     }, TYPING_DELAY_MS)
   }
 
-  function chooseOption(choiceId: string) {
-    if (!pendingChoice || !characterName || isTyping) return
-    const choice = pendingChoice.choices?.find((c) => c.id === choiceId)
-    if (!choice) return
+  function chooseOption(choice: SceneChoice) {
+    if (!pendingScene || !characterName || isTyping) return
+    const chapter = CHAPTERS[chapterIndex]
     setIsTyping(true)
     window.setTimeout(() => {
       const text = choice.resultText.replace('{name}', characterName)
-      resolveTurn(choice.emoji, text, choice.effects, `${pendingChoice.id}-${choice.id}`, pendingChoice.category, choice.setFlags)
+      const nextStats = applyEffects(stats, choice.effects)
+      const nextAge = pendingScene.ageAfter
+      setStats(nextStats)
+      setAge(nextAge)
+      if (choice.memoryTags?.length) setMemory((prev) => [...prev, ...choice.memoryTags!])
+      setLog((prev) => [
+        ...prev,
+        { key: `${pendingScene.id}-${choice.id}`, emoji: choice.emoji, text, accent: chapter.accent, impact: computeImpact(choice.effects) },
+      ])
+      setPendingScene(null)
       setIsTyping(false)
+
+      const statEnding = checkGameOver(nextStats, nextAge)
+      if (statEnding) {
+        setEnding(statEnding)
+        return
+      }
+      const isLastSceneOfChapter = sceneIndex >= chapter.scenes.length - 1
+      if (isLastSceneOfChapter) {
+        if (chapterIndex >= CHAPTERS.length - 1) {
+          setEnding(FINALE_ENDING)
+        } else {
+          setChapterIndex((c) => c + 1)
+          setSceneIndex(0)
+        }
+      } else {
+        setSceneIndex((s) => s + 1)
+      }
     }, TYPING_DELAY_MS)
   }
 
   function restart() {
     setCharacterName(null)
     setNameDraft('')
-    setAge(18)
+    setAge(STARTING_AGE)
     setStats(INITIAL_STATS)
-    setFlags(INITIAL_FLAGS)
+    setMemory([])
+    setChapterIndex(0)
+    setSceneIndex(0)
     setLog([])
-    setRecentEventIds([])
-    setPendingChoice(null)
+    setPendingScene(null)
     setEnding(null)
     setIsTyping(false)
   }
@@ -137,6 +154,9 @@ function App() {
   if (!characterName) {
     return (
       <main className="screen name-screen">
+        <span className="title-emoji" aria-hidden="true">
+          🎭
+        </span>
         <h1>Souffre-Douleur</h1>
         <p className="tagline">Crée un personnage. La vie va s'occuper du reste.</p>
         <input
@@ -212,7 +232,9 @@ function App() {
         </div>
         <div className="stat">
           <span className="stat-label">Âge</span>
-          <span className="stat-value">{age}</span>
+          <span key={age} className="stat-value stat-value--pulse">
+            {age}
+          </span>
         </div>
         {STAT_ORDER.map((key) => {
           if (key === 'argent') {
@@ -244,14 +266,24 @@ function App() {
       </header>
 
       <div className="log">
-        {log.map((entry) => (
-          <p key={entry.key} className={`log-entry${entry.category ? ` log-entry--${entry.category}` : ''}`}>
-            <span className="log-emoji" aria-hidden="true">
-              {entry.emoji}
-            </span>
-            {entry.text}
-          </p>
-        ))}
+        {log.map((entry) =>
+          entry.isChapterTitle ? (
+            <div key={entry.key} className="chapter-divider">
+              <span>{entry.text}</span>
+            </div>
+          ) : (
+            <p
+              key={entry.key}
+              className="log-entry"
+              style={entry.accent ? { borderLeftColor: entry.accent, background: `${entry.accent}14` } : undefined}
+            >
+              <span className="log-emoji" aria-hidden="true">
+                {entry.emoji}
+              </span>
+              {entry.text}
+            </p>
+          ),
+        )}
         {isTyping && (
           <p className="log-entry log-entry--typing" aria-live="polite" aria-label={`La vie de ${characterName} continue...`}>
             <span className="typing-dot" />
@@ -263,17 +295,17 @@ function App() {
       </div>
 
       <div className="action-bar">
-        {isTyping ? null : pendingChoice ? (
+        {isTyping ? null : pendingScene ? (
           <div className="choices">
-            {pendingChoice.choices?.map((choice) => (
-              <button key={choice.id} className="primary-button choice-button" onClick={() => chooseOption(choice.id)}>
+            {pendingScene.choices.map((choice) => (
+              <button key={choice.id} className="primary-button choice-button" onClick={() => chooseOption(choice)}>
                 {choice.label}
               </button>
             ))}
           </div>
         ) : (
-          <button className="primary-button" onClick={advanceYear}>
-            Année suivante
+          <button className="primary-button" onClick={advanceScene}>
+            Continuer
           </button>
         )}
       </div>

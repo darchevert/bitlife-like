@@ -60,3 +60,36 @@ export interface MisfortuneEvent {
   /** Present for events where the player picks how the character reacts. */
   choices?: EventChoice[]
 }
+
+export interface SceneChoice {
+  id: string
+  label: string
+  /** Shown before the result text, like an emoji reaction on a text message. */
+  emoji: string
+  /** Use {name} as a placeholder for the character's name. */
+  resultText: string
+  effects: Partial<Stats>
+  /** Tags added to the run's memory when this choice is picked, for later callbacks. */
+  memoryTags?: string[]
+}
+
+export interface Scene {
+  id: string
+  emoji: string
+  /** The character's age once this scene resolves. */
+  ageAfter: number
+  /** Use {name} as a placeholder for the character's name. */
+  text: string
+  /** If every one of these tags is already in memory, callbackText is shown instead of text. */
+  callbackRequires?: string[]
+  callbackText?: string
+  choices: [SceneChoice, SceneChoice]
+}
+
+export interface Chapter {
+  id: string
+  title: string
+  /** Left-border/tint color for this chapter's bubbles, e.g. "#3b82f6". */
+  accent: string
+  scenes: Scene[]
+}

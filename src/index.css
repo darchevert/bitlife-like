@@ -1,11 +1,16 @@
 :root {
   --text: #6b6375;
   --text-h: #08060d;
-  --bg: #fff;
+  --bg: #fdfcff;
+  --bg-gradient: linear-gradient(160deg, #f6f1ff 0%, #fdfcff 40%, #fff0f7 100%);
+  --card-bg: #ffffff;
   --border: #e5e4e7;
   --accent: #aa3bff;
+  --accent-2: #7c3aed;
   --accent-contrast: #fff;
   --danger: #d1245c;
+  --shadow: 0 8px 24px rgba(124, 58, 237, 0.12);
+  --shadow-sm: 0 2px 8px rgba(20, 10, 40, 0.06);
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
 
@@ -21,13 +26,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
+    --text: #a7a3b0;
+    --text-h: #f5f3f8;
+    --bg: #131018;
+    --bg-gradient: linear-gradient(160deg, #1c1428 0%, #131018 45%, #1c1220 100%);
+    --card-bg: #1d1826;
+    --border: #322b3c;
     --accent: #c084fc;
+    --accent-2: #a855f7;
     --accent-contrast: #16171d;
     --danger: #ff6b9d;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
   }
 }
 
@@ -37,6 +47,7 @@
 
 body {
   margin: 0;
+  background: var(--bg-gradient);
 }
 
 #root {
@@ -46,12 +57,14 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: var(--bg-gradient);
 }
 
 h1 {
   font-family: var(--sans);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text-h);
-  font-size: 32px;
+  font-size: 30px;
   margin: 0 0 8px;
 }
