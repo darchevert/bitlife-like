@@ -3,7 +3,7 @@ import './App.css'
 import { CHAPTERS, FINALE_ENDING, STARTING_AGE } from './data/chapters'
 import { checkGameOver, type Ending } from './data/endings'
 import { pickCloserLine, RANK_CAPTIONS } from './data/mockery'
-import { INITIAL_STATS, STAT_LABELS, type Chapter, type Scene, type SceneChoice, type Stats } from './data/types'
+import { INITIAL_STATS, STAT_LABELS, type Chapter, type DialogueChoice, type DialogueNode, type Scene, type Stats } from './data/types'
 
 interface LogEntry {
   key: string
@@ -54,9 +54,13 @@ function gaugeTone(value: number): 'bad' | 'mid' | 'good' {
   return 'good'
 }
 
-function sceneText(scene: Scene, memory: string[]): string {
-  const hasCallback = scene.callbackRequires && scene.callbackRequires.every((tag) => memory.includes(tag))
-  return hasCallback && scene.callbackText ? scene.callbackText : scene.text
+function nodeText(node: DialogueNode, memory: string[]): string {
+  const hasCallback = node.callbackRequires && node.callbackRequires.every((tag) => memory.includes(tag))
+  return hasCallback && node.callbackText ? node.callbackText : node.text
+}
+
+function findNode(scene: Scene, id: string): DialogueNode | undefined {
+  return scene.nodes.find((n) => n.id === id)
 }
 
 function App() {
@@ -70,6 +74,7 @@ function App() {
   const [log, setLog] = useState<LogEntry[]>([])
   const [history, setHistory] = useState<LogEntry[]>([])
   const [pendingScene, setPendingScene] = useState<Scene | null>(null)
+  const [currentNode, setCurrentNode] = useState<DialogueNode | null>(null)
   const [awaitingNextChapter, setAwaitingNextChapter] = useState<Chapter | null>(null)
   const [chapterTransition, setChapterTransition] = useState<Chapter | null>(null)
   const [ending, setEnding] = useState<Ending | null>(null)
@@ -100,6 +105,8 @@ function App() {
     const chapter = CHAPTERS[chapterIndex]
     if (!chapter) return
     const scene = chapter.scenes[sceneIndex]
+    const node = findNode(scene, scene.startNodeId)
+    if (!node) return
 
     setIsTyping(true)
     window.setTimeout(() => {
@@ -108,33 +115,36 @@ function App() {
         entries.push({ key: `${chapter.id}-title`, emoji: '', text: chapter.title, impact: 0, isChapterTitle: true })
       }
       entries.push({
-        key: `${scene.id}-prompt`,
-        emoji: scene.emoji,
-        text: sceneText(scene, memory).replaceAll('{name}', characterName),
+        key: `${scene.id}-${node.id}`,
+        emoji: node.emoji,
+        text: nodeText(node, memory).replaceAll('{name}', characterName),
         accent: chapter.accent,
         impact: 0,
-        speaker: scene.speaker,
+        speaker: node.speaker,
       })
       pushEntries(entries)
       setPendingScene(scene)
+      setCurrentNode(node)
       setIsTyping(false)
     }, TYPING_DELAY_MS)
   }
 
-  function chooseOption(choice: SceneChoice) {
-    if (!pendingScene || !characterName || isTyping) return
+  function chooseOption(choice: DialogueChoice) {
+    if (!pendingScene || !currentNode || !characterName || isTyping) return
     const chapter = CHAPTERS[chapterIndex]
+    const scene = pendingScene
+    const node = currentNode
     setIsTyping(true)
     window.setTimeout(() => {
       const text = choice.resultText.replaceAll('{name}', characterName)
       const nextStats = applyEffects(stats, choice.effects)
-      const nextAge = pendingScene.ageAfter
       setStats(nextStats)
-      setAge(nextAge)
-      if (choice.memoryTags?.length) setMemory((prev) => [...prev, ...choice.memoryTags!])
+      const updatedMemory = choice.memoryTags?.length ? [...memory, ...choice.memoryTags] : memory
+      if (choice.memoryTags?.length) setMemory(updatedMemory)
+
       const replyEntries: LogEntry[] = [
         {
-          key: `${pendingScene.id}-${choice.id}`,
+          key: `${node.id}-${choice.id}`,
           emoji: choice.emoji,
           text,
           accent: chapter.accent,
@@ -145,23 +155,52 @@ function App() {
       ]
       if (choice.isReply && choice.npcReaction) {
         replyEntries.push({
-          key: `${pendingScene.id}-${choice.id}-reaction`,
+          key: `${node.id}-${choice.id}-reaction`,
           emoji: '',
           text: choice.npcReaction.replaceAll('{name}', characterName),
           accent: chapter.accent,
           impact: 0,
-          speaker: pendingScene.speaker,
+          speaker: node.speaker,
         })
       }
       pushEntries(replyEntries)
+
+      const statEnding = checkGameOver(nextStats, scene.ageAfter)
+      if (statEnding) {
+        setEnding(statEnding)
+        setCurrentNode(null)
+        setPendingScene(null)
+        setIsTyping(false)
+        return
+      }
+
+      if (choice.next) {
+        const next = findNode(scene, choice.next)
+        if (next) {
+          window.setTimeout(() => {
+            pushEntries([
+              {
+                key: `${scene.id}-${next.id}`,
+                emoji: next.emoji,
+                text: nodeText(next, updatedMemory).replaceAll('{name}', characterName),
+                accent: chapter.accent,
+                impact: 0,
+                speaker: next.speaker,
+              },
+            ])
+            setCurrentNode(next)
+            setIsTyping(false)
+          }, TYPING_DELAY_MS)
+          return
+        }
+      }
+
+      // The topic is fully resolved: move the clock forward and progress the story.
+      setAge(scene.ageAfter)
+      setCurrentNode(null)
       setPendingScene(null)
       setIsTyping(false)
 
-      const statEnding = checkGameOver(nextStats, nextAge)
-      if (statEnding) {
-        setEnding(statEnding)
-        return
-      }
       const isLastSceneOfChapter = sceneIndex >= chapter.scenes.length - 1
       if (isLastSceneOfChapter) {
         if (chapterIndex >= CHAPTERS.length - 1) {
@@ -202,6 +241,7 @@ function App() {
     setLog([])
     setHistory([])
     setPendingScene(null)
+    setCurrentNode(null)
     setAwaitingNextChapter(null)
     setChapterTransition(null)
     setEnding(null)
@@ -386,9 +426,9 @@ function App() {
       </div>
 
       <div className="action-bar">
-        {chapterTransition || isTyping ? null : pendingScene ? (
+        {chapterTransition || isTyping ? null : currentNode ? (
           <div className="choices">
-            {pendingScene.choices.map((choice) => (
+            {currentNode.choices.map((choice) => (
               <button key={choice.id} className="primary-button choice-button" onClick={() => chooseOption(choice)}>
                 {choice.label}
               </button>

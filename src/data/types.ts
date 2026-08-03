@@ -61,14 +61,14 @@ export interface MisfortuneEvent {
   choices?: EventChoice[]
 }
 
-export interface SceneChoice {
+export interface DialogueChoice {
   id: string
   label: string
   /** Shown before the result text, like an emoji reaction on a text message. */
   emoji: string
   /**
    * Use {name} as a placeholder for the character's name.
-   * If the parent scene has a `speaker`, set `isReply` and write this as the
+   * If the parent node has a `speaker`, set `isReply` and write this as the
    * character's own spoken line — it renders as an outgoing chat bubble
    * instead of narrator text.
    */
@@ -78,23 +78,36 @@ export interface SceneChoice {
   memoryTags?: string[]
   /** Renders resultText as the player character's own outgoing message rather than narration. */
   isReply?: boolean
-  /** Optional follow-up line from the scene's speaker, shown as a second incoming bubble right after. */
+  /** Optional follow-up line from the node's speaker, shown as a second incoming bubble right after. */
   npcReaction?: string
+  /**
+   * Id of the next DialogueNode in this scene's conversation to continue
+   * into. Omit to end the topic here — the two choices of a node can point
+   * to two different nodes, so the conversation genuinely branches instead
+   * of just swapping a line of flavor text.
+   */
+  next?: string
+}
+
+export interface DialogueNode {
+  id: string
+  emoji: string
+  /** If set, text/callbackText is attributed to this character as an incoming dialogue bubble instead of narrator prose. */
+  speaker?: string
+  /** Use {name} as a placeholder for the character's name. */
+  text: string
+  /** If every one of these tags is already in memory, callbackText is shown instead of text. */
+  callbackRequires?: string[]
+  callbackText?: string
+  choices: [DialogueChoice, DialogueChoice]
 }
 
 export interface Scene {
   id: string
-  emoji: string
-  /** The character's age once this scene resolves. */
+  /** The character's age once the topic (the whole node graph) resolves. */
   ageAfter: number
-  /** Use {name} as a placeholder for the character's name. */
-  text: string
-  /** If set, text/callbackText is attributed to this character as an incoming dialogue bubble instead of narrator prose. */
-  speaker?: string
-  /** If every one of these tags is already in memory, callbackText is shown instead of text. */
-  callbackRequires?: string[]
-  callbackText?: string
-  choices: [SceneChoice, SceneChoice]
+  startNodeId: string
+  nodes: DialogueNode[]
 }
 
 export interface Chapter {
